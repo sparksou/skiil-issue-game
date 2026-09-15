@@ -3,8 +3,9 @@ venv/
 env/
 .env
 
-# PyInstaller
+# PyInstaller & Web Build
 build/
+!build/web/
 *.spec
 
 # Python

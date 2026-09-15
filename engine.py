@@ -2,6 +2,9 @@ import pygame
 import sys
 import math
 import random
+import asyncio
+import math
+import random
 from settings import *
 from fx import ParticleSystem, CameraShake, GlitchText
 from levels import Scene, Level1Scene, Level2Scene, Level3Scene
@@ -434,7 +437,7 @@ class Game:
 
     # ─── Main Loop ───────────────────────────
 
-    def run(self):
+    async def run(self):
         while self.running:
             keys = pygame.key.get_pressed()
 
@@ -527,6 +530,7 @@ class Game:
 
             pygame.display.flip()
             self.clock.tick(FPS)
+            await asyncio.sleep(0)  # Yield control to the browser for WebAssembly
 
         pygame.quit()
         sys.exit()
