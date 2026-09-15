@@ -12,6 +12,11 @@ class Player(pygame.sprite.Sprite):
         self.velocity = pygame.math.Vector2(0, 0)
         self.on_ground = False
         self.gravity_multiplier = gravity_multiplier  # Escalates each loop
+        
+        # Squash and stretch properties
+        self.scale_x = 1.0
+        self.scale_y = 1.0
+        self.color = PLAYER_COLOR
 
     def update(self, keys, tiles, invert: bool = False):
         self.velocity.x = 0
@@ -38,7 +43,41 @@ class Player(pygame.sprite.Sprite):
         PhysicsEngine.apply_gravity(self, self.gravity_multiplier)
         collisions = PhysicsEngine.move(self, tiles)
 
+        was_on_ground = self.on_ground
         self.on_ground = collisions['bottom']
+
+        # Squash and stretch logic
+        target_scale_x, target_scale_y = 1.0, 1.0
+        if not self.on_ground:
+            # Stretch based on vertical velocity
+            stretch = min(0.4, abs(self.velocity.y) * 0.02)
+            target_scale_y = 1.0 + stretch
+            target_scale_x = 1.0 - stretch * 0.5
+        elif not was_on_ground:
+            # Squash on landing
+            self.scale_x = 1.4
+            self.scale_y = 0.6
+        
+        # Interpolate towards target scale
+        self.scale_x += (target_scale_x - self.scale_x) * 0.2
+        self.scale_y += (target_scale_y - self.scale_y) * 0.2
+
+    def render(self, surface, offset, color):
+        w = int(PLAYER_SIZE[0] * self.scale_x)
+        h = int(PLAYER_SIZE[1] * self.scale_y)
+        
+        # Center bottom alignment
+        cx = self.rect.centerx + offset[0]
+        cy = self.rect.bottom + offset[1]
+        
+        # Draw Glow
+        glow_w, glow_h = w + 12, h + 12
+        glow_surf = pygame.Surface((glow_w, glow_h), pygame.SRCALPHA)
+        pygame.draw.rect(glow_surf, (*color[:3], 100), (0, 0, glow_w, glow_h), border_radius=6)
+        surface.blit(glow_surf, (cx - glow_w // 2, cy - glow_h))
+        
+        # Draw Core
+        pygame.draw.rect(surface, color, (cx - w // 2, cy - h, w, h))
 
 
 class TrapPlatform(pygame.sprite.Sprite):

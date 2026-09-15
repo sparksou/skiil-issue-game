@@ -6,7 +6,7 @@ import asyncio
 import math
 import random
 from settings import *
-from fx import ParticleSystem, CameraShake, GlitchText
+from fx import ParticleSystem, CameraShake, GlitchText, TrailSystem
 from levels import Scene, Level1Scene, Level2Scene, Level3Scene
 from audio import AudioEngine
 from ghost import GhostRecorder, GhostPlayer, ShameGhost
@@ -99,56 +99,6 @@ class FakeCrashOverlay:
 
 
 # ─────────────────────────────────────────────
-#  FAKE LOADING SCREEN
-# ─────────────────────────────────────────────
-class FakeLoadingScene(Scene):
-    """Fake loading screen that wastes the player's time with tech jargon."""
-    def __init__(self, game, next_scene_factory):
-        super().__init__(game)
-        self.next_scene_factory = next_scene_factory
-        self.timer = random.randint(120, 240)  # 2 to 4 seconds of fake loading
-        self.max_timer = self.timer
-        self.jargon = random.choice([
-            "Decompiling player patience...",
-            "Allocating memory leaks...",
-            "Syncing skill issue to cloud...",
-            "Downloading motivation...",
-            "Optimizing despair shaders...",
-            "Generating unfair hitboxes..."
-        ])
-
-    def update(self, keys):
-        self.timer -= 1
-        if self.timer <= 0:
-            self.game.current_scene = self.next_scene_factory()
-
-    def render(self, surface: pygame.Surface, offset=(0, 0)):
-        surface.fill(self.game.theme['bg'])
-        
-        # Jargon text
-        text = self.game.font_small.render(self.jargon, True, self.game.theme['hud_text'])
-        surface.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, SCREEN_HEIGHT // 2 - 40))
-
-        # Fake progress bar
-        bar_w = 400
-        bar_h = 20
-        bar_x = SCREEN_WIDTH // 2 - bar_w // 2
-        bar_y = SCREEN_HEIGHT // 2 + 20
-        
-        pygame.draw.rect(surface, self.game.theme['hud_dim'], (bar_x, bar_y, bar_w, bar_h), 2)
-        
-        progress = 1.0 - (self.timer / self.max_timer)
-        # Make progress stall randomly for more agony
-        if self.timer % 30 < 15:
-            progress -= 0.05
-        progress = max(0.0, min(1.0, progress))
-        
-        fill_w = int(bar_w * progress)
-        if fill_w > 0:
-            pygame.draw.rect(surface, self.game.theme['hud_text'], (bar_x, bar_y, fill_w, bar_h))
-
-
-# ─────────────────────────────────────────────
 #  MAIN MENU
 # ─────────────────────────────────────────────
 class MainMenuScene(Scene):
@@ -160,6 +110,18 @@ class MainMenuScene(Scene):
         self.quit_text = "[ESC]  Quit (Coward)"
         self.quit_pos = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 150]
         self.quit_rect = pygame.Rect(0, 0, 10, 10) # Updated in render
+        
+        # Background effects
+        self.particles = []
+        for _ in range(50):
+            self.particles.append({
+                'x': random.randint(0, SCREEN_WIDTH),
+                'y': random.randint(0, SCREEN_HEIGHT),
+                'vx': random.uniform(-0.5, 0.5),
+                'vy': random.uniform(-0.5, 0.5),
+                'size': random.randint(2, 5),
+                'alpha': random.randint(50, 150)
+            })
 
     def update(self, keys):
         if keys[pygame.K_SPACE]:
@@ -201,6 +163,30 @@ class MainMenuScene(Scene):
     def render(self, surface: pygame.Surface, offset=(0, 0)):
         surface.fill(self.game.theme['bg'])
         self.tick += 1
+
+        # Draw scrolling grid
+        grid_color = self.game.theme['tile']
+        grid_size = 40
+        offset_x = (self.tick // 2) % grid_size
+        offset_y = (self.tick // 2) % grid_size
+        for x in range(0 - offset_x, SCREEN_WIDTH, grid_size):
+            pygame.draw.line(surface, grid_color, (x, 0), (x, SCREEN_HEIGHT), 1)
+        for y in range(0 - offset_y, SCREEN_HEIGHT, grid_size):
+            pygame.draw.line(surface, grid_color, (0, y), (SCREEN_WIDTH, y), 1)
+
+        # Draw particles
+        for p in self.particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            if p['x'] < 0: p['x'] = SCREEN_WIDTH
+            if p['x'] > SCREEN_WIDTH: p['x'] = 0
+            if p['y'] < 0: p['y'] = SCREEN_HEIGHT
+            if p['y'] > SCREEN_HEIGHT: p['y'] = 0
+            
+            color = self.game.theme['hud_dim']
+            surf = pygame.Surface((p['size']*2, p['size']*2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*color[:3], p['alpha']), (p['size'], p['size']), p['size'])
+            surface.blit(surf, (int(p['x']), int(p['y'])))
 
         # ── Animated title — sin-wave color pulse per letter ──
         title_str = "SKILL ISSUE"
@@ -256,41 +242,6 @@ class MainMenuScene(Scene):
 
 
 # ─────────────────────────────────────────────
-#  LOOP TRANSITION SCENE
-# ─────────────────────────────────────────────
-class LoopTransitionScene(Scene):
-    def __init__(self, game):
-        super().__init__(game)
-        self.timer = TRANSITION_DURATION
-
-    def update(self, keys):
-        self.timer -= 1
-        if self.timer <= 0:
-            # Inject a fake loading screen before starting the next loop
-            self.game.current_scene = FakeLoadingScene(self.game, lambda: Level1Scene(self.game, self.game.loop_count))
-            self.game.audio.start_music()
-
-    def render(self, surface: pygame.Surface, offset=(0, 0)):
-        t = self.timer / TRANSITION_DURATION
-        pulse = int(abs(math.sin(t * math.pi * 5)) * 35)
-        # Theme aware transition
-        bg_col = (255, 200, 200) if self.game.is_light_mode else (145 + pulse, 0, 0)
-        surface.fill(bg_col)
-
-        texts = [
-            (self.game.font_large, "THERE IS NO ESCAPE.",                                       self.game.theme['hud_text']),
-            (self.game.font_small, f"Loop {self.game.loop_count} initiated.",                   self.game.theme['hud_mock']),
-            (self.game.font_small, f"You have wasted {self.game._fmt_time(self.game.time_wasted)} of your life.", self.game.theme['hud_dim']),
-            (self.game.font_tiny,  "Preparing the same mistakes for your enjoyment...",          self.game.theme['hud_dim']),
-        ]
-        y = SCREEN_HEIGHT // 2 - 90
-        for font, text, color in texts:
-            s = font.render(text, True, color)
-            surface.blit(s, (SCREEN_WIDTH // 2 - s.get_width() // 2, y))
-            y += s.get_height() + 20
-
-
-# ─────────────────────────────────────────────
 #  MAIN GAME CLASS
 # ─────────────────────────────────────────────
 class Game:
@@ -323,6 +274,7 @@ class Game:
         self.insult_engine = InsultEngine()
         self.camera_shake  = CameraShake()
         self.particle_sys  = ParticleSystem()
+        self.trail_sys     = TrailSystem()
         self.glitch_deaths = GlitchText(duration=8)
         self.ghost_recorder = GhostRecorder()
         
@@ -342,8 +294,8 @@ class Game:
         self._pb_pct    = 0.0     
         self._pb_target = 0.98    
 
-        # Start with a fake loading screen just to troll immediately
-        self.current_scene = FakeLoadingScene(self, lambda: MainMenuScene(self))
+        # Start immediately on the main menu
+        self.current_scene = MainMenuScene(self)
 
     # ─── Helpers ─────────────────────────────
 
@@ -362,7 +314,7 @@ class Game:
         self.start_time = pygame.time.get_ticks()
         self.current_level_num = 1
         self._pb_target = 0.98
-        self.current_scene = FakeLoadingScene(self, lambda: Level1Scene(self, self.loop_count))
+        self.current_scene = Level1Scene(self, self.loop_count)
         self.audio.start_music()
 
     def start_loop(self):
@@ -387,7 +339,8 @@ class Game:
             self.loop_count += 1
             self._pb_target = 0.0
             self.audio.play_loop_sting()
-            self.current_scene = LoopTransitionScene(self)
+            self.current_scene = Level1Scene(self, self.loop_count)
+            self.audio.start_music()
         else:
             self.reset_level()
 
@@ -451,8 +404,8 @@ class Game:
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        # Allow normal quit from main menu or loading screen maybe?
-                        if isinstance(self.current_scene, (MainMenuScene, FakeLoadingScene)):
+                        # Allow normal quit from main menu maybe?
+                        if isinstance(self.current_scene, MainMenuScene):
                             self.running = False
                         else:
                             # From inside level, don't let them escape easily
@@ -500,6 +453,7 @@ class Game:
                 self.current_scene.update(keys)
 
             self.particle_sys.update()
+            self.trail_sys.update()
             if self.ghost_player and not self.ghost_player.done:
                 self.ghost_player.update()
             if self.shame_ghost and in_level:
@@ -515,6 +469,7 @@ class Game:
             if self.ghost_player and not self.ghost_player.done:
                 self.ghost_player.render(self.screen, offset)
 
+            self.trail_sys.render(self.screen, offset)
             self.particle_sys.render(self.screen, offset)
 
             if self.loop_count >= CHAOS_LOOP_START and in_level:

@@ -110,8 +110,19 @@ class Level1Scene(Scene):
         for mp in self.moving_platforms:
             solid_rects.append(mp.rect)
 
+        was_on_ground = self.player.on_ground
+
         # Pass invert flag from game's key-swap system
         self.player.update(keys, solid_rects, invert=self.game.controls_inverted)
+
+        # Emit landing particles
+        if not was_on_ground and self.player.on_ground:
+            for _ in range(10):
+                self.game.particle_sys.emit(
+                    self.player.rect.centerx, 
+                    self.player.rect.bottom,
+                    color=(200, 200, 200)
+                )
 
         self.trap_platforms.update()
         self.spikes.update()
@@ -156,25 +167,49 @@ class Level1Scene(Scene):
         if self.player.rect.colliderect(self.goal_rect):
             self.game.next_level()
 
+        # Emit trails if moving fast or just landed
+        if abs(self.player.velocity.x) > 1 or abs(self.player.velocity.y) > 1:
+            if random.random() < 0.3:
+                self.game.trail_sys.emit(self.player.rect.centerx, self.player.rect.bottom - 5, self.game.theme['player'])
+
     def render(self, surface, offset=(0, 0)):
         t = self.game.theme
         surface.fill(t['bg'])
 
         for tile in self.tiles:
             pygame.draw.rect(surface, t['tile'], tile.move(*offset))
-        pygame.draw.rect(surface, t['goal'], self.goal_rect.move(*offset))
+            
+        # Draw Goal Glow
+        goal_rect = self.goal_rect.move(*offset)
+        gw, gh = goal_rect.width + 16, goal_rect.height + 16
+        glow_goal = pygame.Surface((gw, gh), pygame.SRCALPHA)
+        pygame.draw.rect(glow_goal, (*t['goal'][:3], 90), (0, 0, gw, gh), border_radius=8)
+        surface.blit(glow_goal, (goal_rect.centerx - gw // 2, goal_rect.centery - gh // 2))
+        pygame.draw.rect(surface, t['goal'], goal_rect)
         _draw_death_markers(surface, self.game.death_locations, offset, t['death_marker'])
 
         # Recolor sprites to match active theme
-        self.player.image.fill(t['player'])
         _recolor_group(self.spikes, t['spike'])
         _recolor_group(self.proximity_spikes, t['spike'])
         _recolor_group(self.trap_platforms, t['trap_platform'])
         _recolor_group(self.moving_platforms, t['trap_platform'])
         _recolor_group(self.troll_checkpoints, t['checkpoint'])
 
+        # Draw all sprites except player
         for sprite in self.all_sprites:
-            surface.blit(sprite.image, (sprite.rect.x + offset[0], sprite.rect.y + offset[1]))
+            if sprite != self.player:
+                # Add glow to spikes
+                if sprite in self.spikes or sprite in self.proximity_spikes:
+                    sr = sprite.rect.move(*offset)
+                    gw, gh = sr.width + 10, sr.height + 10
+                    glow_spike = pygame.Surface((gw, gh), pygame.SRCALPHA)
+                    pygame.draw.rect(glow_spike, (*t['spike'][:3], 60), (0, 0, gw, gh), border_radius=4)
+                    surface.blit(glow_spike, (sr.centerx - gw // 2, sr.centery - gh // 2))
+                
+                surface.blit(sprite.image, (sprite.rect.x + offset[0], sprite.rect.y + offset[1]))
+                
+        # Render player with squash/stretch and glow
+        self.player.render(surface, offset, t['player'])
 
 
 # ─────────────────────────────────────────────

@@ -107,3 +107,57 @@ class GlitchText:
         else:
             surf = font.render(text, True, normal_color)
             surface.blit(surf, base_pos)
+
+
+class TrailParticle:
+    def __init__(self, x, y, color, size, duration):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.size = size
+        self.timer = duration
+        self.max_timer = duration
+
+    def update(self):
+        self.timer -= 1
+        self.size *= 0.9  # shrink over time
+
+    def render(self, surface, offset=(0, 0)):
+        if self.timer <= 0 or self.size < 0.5:
+            return
+        sx = int(self.x) + offset[0]
+        sy = int(self.y) + offset[1]
+        
+        # Transparent surface for glowing trail
+        surf = pygame.Surface((int(self.size*2), int(self.size*2)), pygame.SRCALPHA)
+        alpha = int((self.timer / self.max_timer) * 150)
+        pygame.draw.circle(surf, (*self.color[:3], alpha), (int(self.size), int(self.size)), int(self.size))
+        surface.blit(surf, (sx - int(self.size), sy - int(self.size)))
+
+
+class TrailSystem:
+    def __init__(self):
+        self.particles = []
+
+    def emit(self, x, y, color, size=4, duration=15):
+        self.particles.append(TrailParticle(x, y, color, size, duration))
+        
+    def emit_dust(self, x, y, count=5, color=(200, 200, 200)):
+        for _ in range(count):
+            p = TrailParticle(x + random.uniform(-10, 10), y + random.uniform(-2, 5), color, random.uniform(3, 6), random.randint(15, 25))
+            # give dust some lateral velocity manually
+            p.vx = random.uniform(-1, 1)
+            p.vy = random.uniform(-1, 0)
+            self.particles.append(p)
+
+    def update(self):
+        for p in self.particles:
+            if hasattr(p, 'vx'):
+                p.x += p.vx
+                p.y += p.vy
+            p.update()
+        self.particles = [p for p in self.particles if p.timer > 0]
+
+    def render(self, surface, offset=(0, 0)):
+        for p in self.particles:
+            p.render(surface, offset)
