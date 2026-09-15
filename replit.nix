@@ -1,0 +1,6 @@
+[replit]
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["python311Packages.pygame"]
